@@ -42,7 +42,7 @@ export default function LoginPage() {
         <form onSubmit={handleSubmit} className="space-y-6">
           <div>
             <label className="block text-sm font-medium text-slate-700 mb-2">
-              Login As
+              Login As (Select Participant and Login to Your Account)
             </label>
             <div className="grid grid-cols-2 gap-3">
               <button
