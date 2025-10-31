@@ -35,7 +35,7 @@ export default function LoginPage() {
   className="w-24 h-24 invert"
 />
           </div>
-          <h1 className="text-3xl font-bold text-slate-900 mb-2">නාදනූ 2025</h1>
+          <h1 className="text-3xl font-bold text-slate-900 mb-2">නාදනූ 2.0</h1>
           <p className="text-slate-600">ICBT Computing Society</p>
         </div>
 
