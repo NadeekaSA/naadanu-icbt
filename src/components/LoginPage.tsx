@@ -65,7 +65,7 @@ export default function LoginPage() {
                     : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
                 }`}
               >
-                Admin
+                {/*Admin button*/}
               </button>
             </div>
           </div>
