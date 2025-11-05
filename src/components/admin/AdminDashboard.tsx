@@ -1,11 +1,12 @@
 import { useState } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
-import { LogOut, Users, Calendar, Megaphone } from 'lucide-react';
+import { LogOut, Users, Calendar, Megaphone, Trophy } from 'lucide-react';
 import ParticipantsManagement from './ParticipantsManagement';
 import AuditionsManagement from './AuditionsManagement';
 import AnnouncementsManagement from './AnnouncementsManagement';
+import PopularPerformancesManagement from './PopularPerformancesManagement';
 
-type Tab = 'participants' | 'auditions' | 'announcements';
+type Tab = 'participants' | 'auditions' | 'announcements' | 'performances';
 
 export default function AdminDashboard() {
   const [activeTab, setActiveTab] = useState<Tab>('participants');
@@ -15,6 +16,7 @@ export default function AdminDashboard() {
     { id: 'participants' as Tab, label: 'Participants', icon: Users },
     { id: 'auditions' as Tab, label: 'Auditions', icon: Calendar },
     { id: 'announcements' as Tab, label: 'Announcements', icon: Megaphone },
+    { id: 'performances' as Tab, label: 'Popular Performances', icon: Trophy },
   ];
 
   return (
@@ -72,6 +74,7 @@ export default function AdminDashboard() {
             {activeTab === 'participants' && <ParticipantsManagement />}
             {activeTab === 'auditions' && <AuditionsManagement />}
             {activeTab === 'announcements' && <AnnouncementsManagement />}
+            {activeTab === 'performances' && <PopularPerformancesManagement />}
           </div>
         </div>
       </div>
