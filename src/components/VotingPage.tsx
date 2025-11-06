@@ -49,6 +49,7 @@ export default function VotingPage() {
       .order('performance_order');
 
     if (error || !performanceData) {
+      console.error('Error fetching performances:', error);
       setLoading(false);
       return;
     }
@@ -216,7 +217,7 @@ export default function VotingPage() {
             <p className="text-sm text-slate-500 mt-2">Check back soon!</p>
           </div>
         ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 w-full">
             {filteredPerformances.map((performance) => (
               <div
                 key={performance.id}
