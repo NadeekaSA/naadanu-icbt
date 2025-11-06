@@ -38,7 +38,7 @@ export default function VotingPage() {
     console.log('Fetching performances...');
 
     try {
-      // Fetch performances with participant and category info
+      // Option 1: Try with proper nested select
       const { data: performanceData, error, status } = await supabase
         .from('final_performances')
         .select(`
@@ -46,8 +46,8 @@ export default function VotingPage() {
           performance_title,
           performance_image_url,
           performance_order,
-          participant:participants(full_name, team_name),
-          category:categories(name, type, is_group)
+          participants!inner(full_name, team_name),
+          categories!inner(name, type, is_group)
         `)
         .eq('is_active', true)
         .order('performance_order');
@@ -56,19 +56,58 @@ export default function VotingPage() {
       console.log('Performance data:', performanceData);
       console.log('Error:', error);
 
-      if (error) {
-        console.error('Error fetching performances:', error);
-        setError(`Database error: ${error.message}`);
+      // If Option 1 fails, try alternative query approaches
+      if (error || !performanceData) {
+        console.log('Trying alternative query...');
+        
+        // Option 2: Try simpler query first
+        const { data: simpleData, error: simpleError } = await supabase
+          .from('final_performances')
+          .select('*')
+          .eq('is_active', true)
+          .order('performance_order');
+
+        console.log('Simple query data:', simpleData);
+        
+        if (simpleError) {
+          console.error('Simple query error:', simpleError);
+          setError(`Database error: ${simpleError.message}`);
+          setLoading(false);
+          return;
+        }
+
+        if (!simpleData || simpleData.length === 0) {
+          console.log('No performances found in database');
+          setPerformances([]);
+          setLoading(false);
+          return;
+        }
+
+        // If we have data but no participant info, we need to fetch it separately
+        const performancesWithDetails = await fetchParticipantDetails(simpleData);
+        setPerformances(performancesWithDetails);
         setLoading(false);
         return;
       }
 
-      if (!performanceData || performanceData.length === 0) {
-        console.log('No performances found in database');
-        setPerformances([]);
-        setLoading(false);
-        return;
-      }
+      // Transform the data from Option 1 to match our interface
+      const transformedData = performanceData.map((perf: any) => ({
+        id: perf.id,
+        performance_title: perf.performance_title,
+        performance_image_url: perf.performance_image_url,
+        performance_order: perf.performance_order,
+        participant: perf.participants ? {
+          full_name: perf.participants.full_name,
+          team_name: perf.participants.team_name
+        } : null,
+        category: perf.categories ? {
+          name: perf.categories.name,
+          type: perf.categories.type,
+          is_group: perf.categories.is_group
+        } : null,
+        vote_count: 0, // Will be updated below
+        has_voted: false // Will be updated below
+      }));
 
       // Fetch vote counts for each performance
       const { data: voteData, error: voteError } = await supabase
@@ -88,7 +127,7 @@ export default function VotingPage() {
       const votedPerformances = getVotedPerformances();
       console.log('Voted performances from localStorage:', votedPerformances);
 
-      const performancesWithVotes = performanceData.map((perf) => ({
+      const performancesWithVotes = transformedData.map((perf) => ({
         ...perf,
         vote_count: voteCounts[perf.id] || 0,
         has_voted: votedPerformances.includes(perf.id),
@@ -101,6 +140,75 @@ export default function VotingPage() {
       setError('An unexpected error occurred while loading performances.');
     } finally {
       setLoading(false);
+    }
+  };
+
+  // Alternative method to fetch participant details separately
+  const fetchParticipantDetails = async (performances: any[]) => {
+    try {
+      // Get all participant IDs from performances
+      const participantIds = performances.map(p => p.participant_id).filter(Boolean);
+      const categoryIds = performances.map(p => p.category_id).filter(Boolean);
+
+      // Fetch participants
+      const { data: participantsData } = participantIds.length > 0 
+        ? await supabase
+            .from('participants')
+            .select('id, full_name, team_name')
+            .in('id', participantIds)
+        : { data: [] };
+
+      // Fetch categories
+      const { data: categoriesData } = categoryIds.length > 0
+        ? await supabase
+            .from('categories')
+            .select('id, name, type, is_group')
+            .in('id', categoryIds)
+        : { data: [] };
+
+      console.log('Participants data:', participantsData);
+      console.log('Categories data:', categoriesData);
+
+      // Create lookup objects
+      const participantsMap: Record<string, any> = {};
+      participantsData?.forEach(p => {
+        participantsMap[p.id] = p;
+      });
+
+      const categoriesMap: Record<string, any> = {};
+      categoriesData?.forEach(c => {
+        categoriesMap[c.id] = c;
+      });
+
+      // Combine data
+      return performances.map(perf => ({
+        id: perf.id,
+        performance_title: perf.performance_title,
+        performance_image_url: perf.performance_image_url,
+        performance_order: perf.performance_order,
+        participant: perf.participant_id && participantsMap[perf.participant_id] 
+          ? {
+              full_name: participantsMap[perf.participant_id].full_name,
+              team_name: participantsMap[perf.participant_id].team_name
+            }
+          : null,
+        category: perf.category_id && categoriesMap[perf.category_id]
+          ? {
+              name: categoriesMap[perf.category_id].name,
+              type: categoriesMap[perf.category_id].type,
+              is_group: categoriesMap[perf.category_id].is_group
+            }
+          : null,
+        vote_count: 0,
+        has_voted: false
+      }));
+    } catch (error) {
+      console.error('Error fetching participant details:', error);
+      return performances.map(perf => ({
+        ...perf,
+        participant: null,
+        category: null
+      }));
     }
   };
 
@@ -137,7 +245,6 @@ export default function VotingPage() {
     setMessage(null);
 
     try {
-      // Simulate IP address (in production, this would be handled by backend)
       const voterIP = getVoterIdentifier();
 
       const { error } = await supabase.from('performance_votes').insert({
@@ -149,14 +256,14 @@ export default function VotingPage() {
       if (error) {
         if (error.message.includes('duplicate') || error.code === '23505') {
           setMessage({ type: 'error', text: 'You have already voted for this performance!' });
-          markAsVoted(performanceId); // Mark as voted even if duplicate to prevent retries
+          markAsVoted(performanceId);
         } else {
           setMessage({ type: 'error', text: 'Failed to submit vote. Please try again.' });
         }
       } else {
         markAsVoted(performanceId);
         setMessage({ type: 'success', text: 'Thank you! Your vote has been recorded.' });
-        fetchPerformances(); // Refresh to update vote count
+        fetchPerformances();
       }
     } catch (err) {
       console.error('Error submitting vote:', err);
@@ -187,7 +294,6 @@ export default function VotingPage() {
       ? performances
       : performances.filter((p) => p.category?.name === categoryFilter);
 
-  // Loading state
   if (loading) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-purple-50 via-pink-50 to-blue-50 flex items-center justify-center">
@@ -199,7 +305,6 @@ export default function VotingPage() {
     );
   }
 
-  // Error state
   if (error) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-purple-50 via-pink-50 to-blue-50 flex items-center justify-center">
@@ -308,6 +413,14 @@ export default function VotingPage() {
               const categoryType = performance.category?.type || 'other';
               const isGroup = performance.category?.is_group || false;
 
+              // Debug log for each performance
+              console.log('Rendering performance:', {
+                title: performance.performance_title,
+                participant: performance.participant,
+                participantName,
+                teamName
+              });
+
               return (
                 <div
                   key={performance.id}
@@ -320,7 +433,6 @@ export default function VotingPage() {
                         alt={performance.performance_title}
                         className="w-full h-full object-cover"
                         onError={(e) => {
-                          // Handle image loading errors
                           const target = e.target as HTMLImageElement;
                           target.style.display = 'none';
                         }}
@@ -347,6 +459,9 @@ export default function VotingPage() {
                         </h3>
                         <p className="text-sm text-slate-600">
                           {teamName || participantName}
+                          {!performance.participant && (
+                            <span className="text-xs text-orange-500 ml-2">(No participant data)</span>
+                          )}
                         </p>
                       </div>
                     </div>
