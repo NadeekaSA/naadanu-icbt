@@ -45,7 +45,7 @@ export default function VotingPage() {
         participant:participants(full_name, team_name),
         category:categories(name, type, is_group)
       `)
-    .eq('is_active') 
+    .eq('is_active', true) 
       .order('performance_order');
 
     if (error || !performanceData) {
@@ -308,5 +308,6 @@ export default function VotingPage() {
   );
 
 }
+
 
 
