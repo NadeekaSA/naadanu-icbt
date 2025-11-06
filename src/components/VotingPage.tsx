@@ -9,13 +9,13 @@ interface Performance {
   performance_order: number;
   participant: {
     full_name: string;
-    team_name: string;
-  };
+    team_name?: string;
+  } | null;
   category: {
     name: string;
     type: string;
     is_group: boolean;
-  };
+  } | null;
   vote_count: number;
   has_voted: boolean;
 }
@@ -26,6 +26,7 @@ export default function VotingPage() {
   const [votingFor, setVotingFor] = useState<string | null>(null);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [categoryFilter, setCategoryFilter] = useState<string>('all');
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     fetchPerformances();
@@ -33,60 +34,96 @@ export default function VotingPage() {
 
   const fetchPerformances = async () => {
     setLoading(true);
+    setError(null);
+    console.log('Fetching performances...');
 
-    // Fetch performances with participant and category info
-    const { data: performanceData, error } = await supabase
-      .from('final_performances')
-      .select(`
-        id,
-        performance_title,
-        performance_image_url,
-        performance_order,
-        participant:participants(full_name, team_name),
-        category:categories(name, type, is_group)
-      `)
-    .eq('is_active', true) 
-      .order('performance_order');
+    try {
+      // Fetch performances with participant and category info
+      const { data: performanceData, error, status } = await supabase
+        .from('final_performances')
+        .select(`
+          id,
+          performance_title,
+          performance_image_url,
+          performance_order,
+          participant:participants(full_name, team_name),
+          category:categories(name, type, is_group)
+        `)
+        .eq('is_active', true)
+        .order('performance_order');
 
-    if (error || !performanceData) {
-      console.error('Error fetching performances:', error);
+      console.log('Supabase response status:', status);
+      console.log('Performance data:', performanceData);
+      console.log('Error:', error);
+
+      if (error) {
+        console.error('Error fetching performances:', error);
+        setError(`Database error: ${error.message}`);
+        setLoading(false);
+        return;
+      }
+
+      if (!performanceData || performanceData.length === 0) {
+        console.log('No performances found in database');
+        setPerformances([]);
+        setLoading(false);
+        return;
+      }
+
+      // Fetch vote counts for each performance
+      const { data: voteData, error: voteError } = await supabase
+        .from('performance_votes')
+        .select('performance_id');
+
+      console.log('Vote data:', voteData);
+      console.log('Vote error:', voteError);
+
+      // Count votes per performance
+      const voteCounts: Record<string, number> = {};
+      voteData?.forEach((vote) => {
+        voteCounts[vote.performance_id] = (voteCounts[vote.performance_id] || 0) + 1;
+      });
+
+      // Check which performances current user has voted for
+      const votedPerformances = getVotedPerformances();
+      console.log('Voted performances from localStorage:', votedPerformances);
+
+      const performancesWithVotes = performanceData.map((perf) => ({
+        ...perf,
+        vote_count: voteCounts[perf.id] || 0,
+        has_voted: votedPerformances.includes(perf.id),
+      }));
+
+      console.log('Final performances with votes:', performancesWithVotes);
+      setPerformances(performancesWithVotes);
+    } catch (err) {
+      console.error('Unexpected error in fetchPerformances:', err);
+      setError('An unexpected error occurred while loading performances.');
+    } finally {
       setLoading(false);
-      return;
     }
-
-    // Fetch vote counts for each performance
-    const { data: voteData } = await supabase
-      .from('performance_votes')
-      .select('performance_id');
-
-    // Count votes per performance
-    const voteCounts: Record<string, number> = {};
-    voteData?.forEach((vote) => {
-      voteCounts[vote.performance_id] = (voteCounts[vote.performance_id] || 0) + 1;
-    });
-
-    // Check which performances current user has voted for (by IP simulation using localStorage)
-    const votedPerformances = getVotedPerformances();
-
-    const performancesWithVotes = (performanceData as any[]).map((perf) => ({
-      ...perf,
-      vote_count: voteCounts[perf.id] || 0,
-      has_voted: votedPerformances.includes(perf.id),
-    }));
-
-    setPerformances(performancesWithVotes);
-    setLoading(false);
   };
 
   const getVotedPerformances = (): string[] => {
-    const voted = localStorage.getItem('voted_performances');
-    return voted ? JSON.parse(voted) : [];
+    try {
+      const voted = localStorage.getItem('voted_performances');
+      return voted ? JSON.parse(voted) : [];
+    } catch (error) {
+      console.error('Error reading voted performances from localStorage:', error);
+      return [];
+    }
   };
 
   const markAsVoted = (performanceId: string) => {
-    const voted = getVotedPerformances();
-    voted.push(performanceId);
-    localStorage.setItem('voted_performances', JSON.stringify(voted));
+    try {
+      const voted = getVotedPerformances();
+      if (!voted.includes(performanceId)) {
+        voted.push(performanceId);
+        localStorage.setItem('voted_performances', JSON.stringify(voted));
+      }
+    } catch (error) {
+      console.error('Error saving vote to localStorage:', error);
+    }
   };
 
   const handleVote = async (performanceId: string) => {
@@ -99,52 +136,84 @@ export default function VotingPage() {
     setVotingFor(performanceId);
     setMessage(null);
 
-    // Simulate IP address (in production, this would be handled by backend)
-    const voterIP = getVoterIdentifier();
+    try {
+      // Simulate IP address (in production, this would be handled by backend)
+      const voterIP = getVoterIdentifier();
 
-    const { error } = await supabase.from('performance_votes').insert({
-      performance_id: performanceId,
-      voter_ip: voterIP,
-      voter_fingerprint: navigator.userAgent,
-    });
+      const { error } = await supabase.from('performance_votes').insert({
+        performance_id: performanceId,
+        voter_ip: voterIP,
+        voter_fingerprint: navigator.userAgent,
+      });
 
-    if (error) {
-      if (error.message.includes('duplicate') || error.code === '23505') {
-        setMessage({ type: 'error', text: 'You have already voted for this performance!' });
+      if (error) {
+        if (error.message.includes('duplicate') || error.code === '23505') {
+          setMessage({ type: 'error', text: 'You have already voted for this performance!' });
+          markAsVoted(performanceId); // Mark as voted even if duplicate to prevent retries
+        } else {
+          setMessage({ type: 'error', text: 'Failed to submit vote. Please try again.' });
+        }
       } else {
-        setMessage({ type: 'error', text: 'Failed to submit vote. Please try again.' });
+        markAsVoted(performanceId);
+        setMessage({ type: 'success', text: 'Thank you! Your vote has been recorded.' });
+        fetchPerformances(); // Refresh to update vote count
       }
-    } else {
-      markAsVoted(performanceId);
-      setMessage({ type: 'success', text: 'Thank you! Your vote has been recorded.' });
-      fetchPerformances(); // Refresh to update vote count
+    } catch (err) {
+      console.error('Error submitting vote:', err);
+      setMessage({ type: 'error', text: 'An unexpected error occurred while voting.' });
+    } finally {
+      setVotingFor(null);
+      setTimeout(() => setMessage(null), 5000);
     }
-
-    setVotingFor(null);
-    setTimeout(() => setMessage(null), 5000);
   };
 
   const getVoterIdentifier = (): string => {
-    // In a real app, this would be the user's IP from the backend
-    // For now, we'll use a combination of localStorage and browser fingerprint
-    let identifier = localStorage.getItem('voter_id');
-    if (!identifier) {
-      identifier = `voter_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-      localStorage.setItem('voter_id', identifier);
+    try {
+      let identifier = localStorage.getItem('voter_id');
+      if (!identifier) {
+        identifier = `voter_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+        localStorage.setItem('voter_id', identifier);
+      }
+      return identifier;
+    } catch (error) {
+      console.error('Error generating voter identifier:', error);
+      return `fallback_voter_${Date.now()}`;
     }
-    return identifier;
   };
 
-  const categories = [...new Set(performances.map((p) => p.category.name))];
+  const categories = [...new Set(performances.map((p) => p.category?.name).filter(Boolean))] as string[];
   const filteredPerformances =
     categoryFilter === 'all'
       ? performances
-      : performances.filter((p) => p.category.name === categoryFilter);
+      : performances.filter((p) => p.category?.name === categoryFilter);
 
+  // Loading state
   if (loading) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-purple-50 via-pink-50 to-blue-50 flex items-center justify-center">
-        <div className="text-slate-600 text-lg">Loading performances...</div>
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-purple-600 mx-auto mb-4"></div>
+          <div className="text-slate-600 text-lg">Loading performances...</div>
+        </div>
+      </div>
+    );
+  }
+
+  // Error state
+  if (error) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-purple-50 via-pink-50 to-blue-50 flex items-center justify-center">
+        <div className="text-center max-w-md mx-4">
+          <AlertCircle className="w-16 h-16 text-red-500 mx-auto mb-4" />
+          <h2 className="text-xl font-bold text-slate-900 mb-2">Error Loading Performances</h2>
+          <p className="text-slate-600 mb-4">{error}</p>
+          <button
+            onClick={fetchPerformances}
+            className="bg-purple-600 text-white px-6 py-2 rounded-lg hover:bg-purple-700 transition-colors"
+          >
+            Try Again
+          </button>
+        </div>
       </div>
     );
   }
@@ -213,87 +282,111 @@ export default function VotingPage() {
         {filteredPerformances.length === 0 ? (
           <div className="text-center py-16">
             <Music className="w-16 h-16 mx-auto mb-4 text-slate-400 opacity-50" />
-            <p className="text-xl text-slate-600">No performances available for voting yet.</p>
-            <p className="text-sm text-slate-500 mt-2">Check back soon!</p>
+            <p className="text-xl text-slate-600">
+              {performances.length === 0 
+                ? 'No performances available for voting yet.' 
+                : 'No performances found in this category.'}
+            </p>
+            <p className="text-sm text-slate-500 mt-2">
+              {performances.length === 0 ? 'Check back soon!' : 'Try selecting a different category.'}
+            </p>
+            {performances.length === 0 && (
+              <button
+                onClick={fetchPerformances}
+                className="mt-4 bg-purple-600 text-white px-6 py-2 rounded-lg hover:bg-purple-700 transition-colors"
+              >
+                Refresh
+              </button>
+            )}
           </div>
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 w-full">
-            {filteredPerformances.map((performance) => (
-              <div
-                key={performance.id}
-                className="bg-white rounded-xl shadow-md hover:shadow-xl transition-shadow border border-slate-200 overflow-hidden"
-              >
-                {performance.performance_image_url && (
-                  <div className="w-full h-48 overflow-hidden">
-                    <img 
-                      src={performance.performance_image_url} 
-                      alt={performance.performance_title}
-                      className="w-full h-full object-cover"
-                      onError={(e) => {
-                        // Handle image loading errors
-                        const target = e.target as HTMLImageElement;
-                        target.style.display = 'none';
-                      }}
-                    />
-                  </div>
-                )}
-                <div className="p-6">
-                  <div className="flex items-start justify-between mb-3">
-                    <div className="flex-1">
-                      <span
-                        className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium mb-2 ${
-                          performance.category.type === 'singing'
-                            ? 'bg-purple-100 text-purple-800'
-                            : 'bg-blue-100 text-blue-800'
+            {filteredPerformances.map((performance) => {
+              const participantName = performance.participant?.full_name || 'Unknown Participant';
+              const teamName = performance.participant?.team_name;
+              const categoryName = performance.category?.name || 'Uncategorized';
+              const categoryType = performance.category?.type || 'other';
+              const isGroup = performance.category?.is_group || false;
+
+              return (
+                <div
+                  key={performance.id}
+                  className="bg-white rounded-xl shadow-md hover:shadow-xl transition-shadow border border-slate-200 overflow-hidden"
+                >
+                  {performance.performance_image_url && (
+                    <div className="w-full h-48 overflow-hidden bg-slate-100">
+                      <img 
+                        src={performance.performance_image_url} 
+                        alt={performance.performance_title}
+                        className="w-full h-full object-cover"
+                        onError={(e) => {
+                          // Handle image loading errors
+                          const target = e.target as HTMLImageElement;
+                          target.style.display = 'none';
+                        }}
+                      />
+                    </div>
+                  )}
+                  <div className="p-6">
+                    <div className="flex items-start justify-between mb-3">
+                      <div className="flex-1">
+                        <span
+                          className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium mb-2 ${
+                            categoryType === 'singing'
+                              ? 'bg-purple-100 text-purple-800'
+                              : categoryType === 'dancing'
+                              ? 'bg-blue-100 text-blue-800'
+                              : 'bg-green-100 text-green-800'
+                          }`}
+                        >
+                          {isGroup ? <UsersIcon className="w-3 h-3 mr-1" /> : null}
+                          {categoryName}
+                        </span>
+                        <h3 className="text-lg font-bold text-slate-900 mb-1">
+                          {performance.performance_title}
+                        </h3>
+                        <p className="text-sm text-slate-600">
+                          {teamName || participantName}
+                        </p>
+                      </div>
+                    </div>
+                  
+                    <div className="flex items-center justify-between pt-4 border-t border-slate-100">
+                      <div className="flex items-center gap-2 text-slate-600">
+                        <Heart className="w-5 h-5 text-pink-500" />
+                        <span className="font-semibold text-lg">{performance.vote_count}</span>
+                        <span className="text-sm text-slate-500">
+                          {performance.vote_count === 1 ? 'like' : 'likes'}
+                        </span>
+                      </div> 
+                                
+                      <button
+                        onClick={() => handleVote(performance.id)}
+                        disabled={performance.has_voted || votingFor === performance.id}
+                        className={`flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition-all ${
+                          performance.has_voted
+                            ? 'bg-slate-100 text-slate-400 cursor-not-allowed'
+                            : votingFor === performance.id
+                            ? 'bg-slate-200 text-slate-500 cursor-wait'
+                            : 'bg-gradient-to-r from-pink-500 to-purple-600 text-white hover:from-pink-600 hover:to-purple-700 shadow-md hover:shadow-lg'
                         }`}
                       >
-                        {performance.category.is_group ? <UsersIcon className="w-3 h-3 mr-1" /> : null}
-                        {performance.category.name}
-                      </span>
-                      <h3 className="text-lg font-bold text-slate-900 mb-1">
-                        {performance.performance_title}
-                      </h3>
-                      <p className="text-sm text-slate-600">
-                        {performance.participant.team_name || performance.participant.full_name}
-                      </p>
+                        <Heart
+                          className={`w-5 h-5 ${
+                            performance.has_voted ? 'fill-current' : ''
+                          }`}
+                        />
+                        {performance.has_voted
+                          ? 'Voted'
+                          : votingFor === performance.id
+                          ? 'Voting...'
+                          : 'Vote'}
+                      </button>
                     </div>
                   </div>
-                
-                  <div className="flex items-center justify-between pt-4 border-t border-slate-100">
-                    <div className="flex items-center gap-2 text-slate-600">
-                      <Heart className="w-5 h-5 text-pink-500" />
-                      <span className="font-semibold text-lg">{performance.vote_count}</span>
-                      <span className="text-sm text-slate-500">
-                        {performance.vote_count === 1 ? 'like' : 'likes'}
-                      </span>
-                    </div> 
-                              
-                    <button
-                      onClick={() => handleVote(performance.id)}
-                      disabled={performance.has_voted || votingFor === performance.id}
-                      className={`flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition-all ${
-                        performance.has_voted
-                          ? 'bg-slate-100 text-slate-400 cursor-not-allowed'
-                          : votingFor === performance.id
-                          ? 'bg-slate-200 text-slate-500 cursor-wait'
-                          : 'bg-gradient-to-r from-pink-500 to-purple-600 text-white hover:from-pink-600 hover:to-purple-700 shadow-md hover:shadow-lg'
-                      }`}
-                    >
-                      <Heart
-                        className={`w-5 h-5 ${
-                          performance.has_voted ? 'fill-current' : ''
-                        }`}
-                      />
-                      {performance.has_voted
-                        ? 'Voted'
-                        : votingFor === performance.id
-                        ? 'Voting...'
-                        : 'Vote'}
-                    </button>
-                  </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </main>
@@ -306,9 +399,4 @@ export default function VotingPage() {
       </footer>
     </div>
   );
-
 }
-
-
-
-
