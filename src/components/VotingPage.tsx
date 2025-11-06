@@ -216,7 +216,7 @@ export default function VotingPage() {
             <p className="text-sm text-slate-500 mt-2">Check back soon!</p>
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
             {filteredPerformances.map((performance) => (
               <div
                 key={performance.id}
@@ -260,10 +260,10 @@ export default function VotingPage() {
                 
                   <div className="flex items-center justify-between pt-4 border-t border-slate-100">
                     <div className="flex items-center gap-2 text-slate-600">
-                     {/* <Heart className="w-5 h-5 text-pink-500" /> */}
-                     {/* <span className="font-semibold text-lg">{performance.vote_count}</span> */}
+                      <Heart className="w-5 h-5 text-pink-500" />
+                      <span className="font-semibold text-lg">{performance.vote_count}</span>
                       <span className="text-sm text-slate-500">
-                      {/*  {performance.vote_count === 1 ? 'like' : 'likes'} */}
+                        {performance.vote_count === 1 ? 'like' : 'likes'}
                       </span>
                     </div> 
                               
