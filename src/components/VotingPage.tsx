@@ -9,7 +9,7 @@ interface Performance {
   performance_order: number;
   participant: {
     full_name: string;
-    team_name?: string;
+    team_name: string;
   };
   category: {
     name: string;
@@ -308,6 +308,7 @@ export default function VotingPage() {
   );
 
 }
+
 
 
 
