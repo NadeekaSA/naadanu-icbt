@@ -1,3 +1,4 @@
+import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { useState } from 'react';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import LandingPage from './components/LandingPage';
@@ -5,6 +6,7 @@ import LoginPage from './components/LoginPage';
 import RegistrationPage from './components/RegistrationPage';
 import AdminDashboard from './components/admin/AdminDashboard';
 import ParticipantDashboard from './components/participant/ParticipantDashboard';
+import VotingPage from './components/VotingPage';
 
 type View = 'landing' | 'login' | 'register';
 
@@ -20,34 +22,33 @@ function AppContent() {
     );
   }
 
-  if (user) {
-    if (user.role === 'admin') {
-      return <AdminDashboard />;
-    } else if (user.role === 'participant') {
-      return <ParticipantDashboard />;
-    }
-  }
-
-  if (view === 'login') {
-    return <LoginPage />;
-  }
-
-  if (view === 'register') {
-    return <RegistrationPage onBackToLogin={() => setView('login')} />;
-  }
-
   return (
-    <LandingPage
-      onLogin={() => setView('login')}
-      onRegister={() => setView('register')}
-    />
+    <>
+      {user ? (
+        user.role === 'admin' ? <AdminDashboard /> : <ParticipantDashboard />
+      ) : view === 'login' ? (
+        <LoginPage />
+      ) : view === 'register' ? (
+        <RegistrationPage onBackToLogin={() => setView('login')} />
+      ) : (
+        <LandingPage
+          onLogin={() => setView('login')}
+          onRegister={() => setView('register')}
+        />
+      )}
+    </>
   );
 }
 
 function App() {
   return (
     <AuthProvider>
-      <AppContent />
+      <BrowserRouter>
+        <Routes>
+          <Route path="/" element={<AppContent />} />
+          <Route path="/vote" element={<VotingPage />} />
+        </Routes>
+      </BrowserRouter>
     </AuthProvider>
   );
 }
