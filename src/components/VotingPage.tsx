@@ -35,33 +35,19 @@ export default function VotingPage() {
     try {
       console.log('Starting to fetch performances...');
 
-      // Let's try different query approaches to find what works
-
-      // First approach: Try with proper join syntax
+      // First, get all performances with their participant and category IDs
       const { data: performanceData, error: performanceError } = await supabase
         .from('final_performances')
-        .select(`
-          *,
-          participants (
-            full_name,
-            team_name
-          ),
-          categories (
-            name,
-            type,
-            is_group
-          )
-        `)
+        .select('*')
         .eq('is_active', true)
         .order('performance_order');
 
-      console.log('Performances with joins:', performanceData);
-      console.log('Join error:', performanceError);
+      console.log('Raw performances data:', performanceData);
 
       if (performanceError) {
-        console.log('Join query failed, trying alternative approach...');
-        // If join fails, try the manual approach
-        await fetchPerformancesManually();
+        console.error('Error fetching performances:', performanceError);
+        setError(`Error loading performances: ${performanceError.message}`);
+        setLoading(false);
         return;
       }
 
@@ -72,22 +58,73 @@ export default function VotingPage() {
         return;
       }
 
-      // Process the joined data
-      const processedPerformances = performanceData.map(perf => {
-        console.log('Processing performance:', perf);
-        
+      // Extract all participant IDs and category IDs
+      const participantIds = performanceData.map(p => p.participant_id).filter(Boolean);
+      const categoryIds = performanceData.map(p => p.category_id).filter(Boolean);
+
+      console.log('Participant IDs to fetch:', participantIds);
+      console.log('Category IDs to fetch:', categoryIds);
+
+      // Fetch participants data
+      const { data: participantsData, error: participantsError } = await supabase
+        .from('participants')
+        .select('id, full_name, team_name')
+        .in('id', participantIds);
+
+      console.log('Participants data:', participantsData);
+      if (participantsError) {
+        console.error('Error fetching participants:', participantsError);
+      }
+
+      // Fetch categories data
+      const { data: categoriesData, error: categoriesError } = await supabase
+        .from('categories')
+        .select('id, name, type, is_group')
+        .in('id', categoryIds);
+
+      console.log('Categories data:', categoriesData);
+      if (categoriesError) {
+        console.error('Error fetching categories:', categoriesError);
+      }
+
+      // Create lookup maps
+      const participantsMap: Record<string, any> = {};
+      participantsData?.forEach(participant => {
+        participantsMap[participant.id] = participant;
+      });
+
+      const categoriesMap: Record<string, any> = {};
+      categoriesData?.forEach(category => {
+        categoriesMap[category.id] = category;
+      });
+
+      console.log('Participants map:', participantsMap);
+      console.log('Categories map:', categoriesMap);
+
+      // Combine all data
+      const performancesWithDetails = performanceData.map(performance => {
+        const participant = participantsMap[performance.participant_id];
+        const category = categoriesMap[performance.category_id];
+
+        console.log(`Processing performance ${performance.id}:`, {
+          participant_id: performance.participant_id,
+          participant,
+          category_id: performance.category_id,
+          category
+        });
+
         return {
-          id: perf.id,
-          performance_title: perf.performance_title,
-          performance_image_url: perf.performance_image_url,
-          performance_order: perf.performance_order,
-          participant_name: perf.participants?.full_name || 'Unknown Participant',
-          team_name: perf.participants?.team_name,
-          category_name: perf.categories?.name || 'Uncategorized',
-          category_type: perf.categories?.type || 'other',
-          is_group: perf.categories?.is_group || false,
-          vote_count: 0, // Will be updated
-          has_voted: false // Will be updated
+          id: performance.id,
+          performance_title: performance.performance_title,
+          performance_image_url: performance.performance_image_url,
+          performance_order: performance.performance_order,
+          participant_name: participant?.full_name || 'Unknown Participant',
+          team_name: participant?.team_name,
+          category_name: category?.name || 'Uncategorized',
+          category_type: category?.type || 'other',
+          is_group: category?.is_group || false,
+          vote_count: 0, // Will be updated below
+          has_voted: false // Will be updated below
         };
       });
 
@@ -107,13 +144,13 @@ export default function VotingPage() {
       // Check which performances current user has voted for
       const votedPerformances = getVotedPerformances();
 
-      const finalPerformances = processedPerformances.map((perf) => ({
+      const finalPerformances = performancesWithDetails.map((perf) => ({
         ...perf,
         vote_count: voteCounts[perf.id] || 0,
         has_voted: votedPerformances.includes(perf.id),
       }));
 
-      console.log('Final performances:', finalPerformances);
+      console.log('Final performances with all data:', finalPerformances);
       setPerformances(finalPerformances);
 
     } catch (err) {
@@ -121,117 +158,6 @@ export default function VotingPage() {
       setError('An unexpected error occurred while loading performances.');
     } finally {
       setLoading(false);
-    }
-  };
-
-  const fetchPerformancesManually = async () => {
-    try {
-      // Get basic performances
-      const { data: performanceData, error: performanceError } = await supabase
-        .from('final_performances')
-        .select('*')
-        .eq('is_active', true)
-        .order('performance_order');
-
-      if (performanceError) throw performanceError;
-
-      if (!performanceData || performanceData.length === 0) {
-        setPerformances([]);
-        return;
-      }
-
-      console.log('Raw performances:', performanceData);
-
-      // Get all participant IDs and category IDs
-      const participantIds = performanceData.map(p => p.participant_id).filter(Boolean);
-      const categoryIds = performanceData.map(p => p.category_id).filter(Boolean);
-
-      console.log('Participant IDs:', participantIds);
-      console.log('Category IDs:', categoryIds);
-
-      // Fetch participants in batch
-      const { data: participantsData } = participantIds.length > 0 
-        ? await supabase
-            .from('participants')
-            .select('id, full_name, team_name')
-            .in('id', participantIds)
-        : { data: [] };
-
-      // Fetch categories in batch
-      const { data: categoriesData } = categoryIds.length > 0
-        ? await supabase
-            .from('categories')
-            .select('id, name, type, is_group')
-            .in('id', categoryIds)
-        : { data: [] };
-
-      console.log('Participants data:', participantsData);
-      console.log('Categories data:', categoriesData);
-
-      // Create lookup maps
-      const participantsMap: Record<string, any> = {};
-      participantsData?.forEach(p => {
-        participantsMap[p.id] = p;
-      });
-
-      const categoriesMap: Record<string, any> = {};
-      categoriesData?.forEach(c => {
-        categoriesMap[c.id] = c;
-      });
-
-      console.log('Participants map:', participantsMap);
-      console.log('Categories map:', categoriesMap);
-
-      // Build performances with details
-      const performancesWithDetails = performanceData.map(perf => {
-        const participant = perf.participant_id ? participantsMap[perf.participant_id] : null;
-        const category = perf.category_id ? categoriesMap[perf.category_id] : null;
-
-        console.log(`Performance ${perf.id}:`, {
-          participant_id: perf.participant_id,
-          participant,
-          category_id: perf.category_id,
-          category
-        });
-
-        return {
-          id: perf.id,
-          performance_title: perf.performance_title,
-          performance_image_url: perf.performance_image_url,
-          performance_order: perf.performance_order,
-          participant_name: participant?.full_name || 'Unknown Participant',
-          team_name: participant?.team_name,
-          category_name: category?.name || 'Uncategorized',
-          category_type: category?.type || 'other',
-          is_group: category?.is_group || false,
-          vote_count: 0,
-          has_voted: false
-        };
-      });
-
-      // Fetch vote counts
-      const { data: voteData } = await supabase
-        .from('performance_votes')
-        .select('performance_id');
-
-      const voteCounts: Record<string, number> = {};
-      voteData?.forEach((vote) => {
-        voteCounts[vote.performance_id] = (voteCounts[vote.performance_id] || 0) + 1;
-      });
-
-      const votedPerformances = getVotedPerformances();
-
-      const finalPerformances = performancesWithDetails.map((perf) => ({
-        ...perf,
-        vote_count: voteCounts[perf.id] || 0,
-        has_voted: votedPerformances.includes(perf.id),
-      }));
-
-      setPerformances(finalPerformances);
-
-    } catch (error) {
-      console.error('Error in manual fetch:', error);
-      setError('Failed to load performances. Please check your database connection.');
     }
   };
 
@@ -278,7 +204,12 @@ export default function VotingPage() {
 
       if (error) {
         console.error('Vote error:', error);
-        setMessage({ type: 'error', text: 'Failed to submit vote. Please try again.' });
+        if (error.code === '23505') { // Unique violation
+          setMessage({ type: 'error', text: 'You have already voted for this performance!' });
+          markAsVoted(performanceId);
+        } else {
+          setMessage({ type: 'error', text: 'Failed to submit vote. Please try again.' });
+        }
       } else {
         markAsVoted(performanceId);
         setMessage({ type: 'success', text: 'Thank you! Your vote has been recorded.' });
@@ -463,7 +394,7 @@ export default function VotingPage() {
                       <p className="text-sm text-slate-600">
                         {performance.team_name || performance.participant_name}
                         {performance.participant_name === 'Unknown Participant' && (
-                          <span className="text-xs text-orange-500 ml-2">(Check participant data)</span>
+                          <span className="text-xs text-orange-500 ml-2">(Participant data missing)</span>
                         )}
                       </p>
                     </div>
