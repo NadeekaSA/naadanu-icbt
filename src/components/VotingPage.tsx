@@ -7,15 +7,11 @@ interface Performance {
   performance_title: string;
   performance_image_url?: string;
   performance_order: number;
-  participant: {
-    full_name: string;
-    team_name?: string;
-  } | null;
-  category: {
-    name: string;
-    type: string;
-    is_group: boolean;
-  } | null;
+  participant_name: string;
+  team_name?: string;
+  category_name: string;
+  category_type: string;
+  is_group: boolean;
   vote_count: number;
   has_voted: boolean;
 }
@@ -35,87 +31,43 @@ export default function VotingPage() {
   const fetchPerformances = async () => {
     setLoading(true);
     setError(null);
-    console.log('Fetching performances...');
-
+    
     try {
-      // Option 1: Try with proper nested select
-      const { data: performanceData, error, status } = await supabase
+      console.log('Starting to fetch performances...');
+
+      // First, let's just get the basic performances data
+      const { data: performanceData, error: performanceError } = await supabase
         .from('final_performances')
-        .select(`
-          id,
-          performance_title,
-          performance_image_url,
-          performance_order,
-          participants!inner(full_name, team_name),
-          categories!inner(name, type, is_group)
-        `)
+        .select('*')
         .eq('is_active', true)
         .order('performance_order');
 
-      console.log('Supabase response status:', status);
-      console.log('Performance data:', performanceData);
-      console.log('Error:', error);
+      console.log('Raw performances data:', performanceData);
+      console.log('Performance error:', performanceError);
 
-      // If Option 1 fails, try alternative query approaches
-      if (error || !performanceData) {
-        console.log('Trying alternative query...');
-        
-        // Option 2: Try simpler query first
-        const { data: simpleData, error: simpleError } = await supabase
-          .from('final_performances')
-          .select('*')
-          .eq('is_active', true)
-          .order('performance_order');
-
-        console.log('Simple query data:', simpleData);
-        
-        if (simpleError) {
-          console.error('Simple query error:', simpleError);
-          setError(`Database error: ${simpleError.message}`);
-          setLoading(false);
-          return;
-        }
-
-        if (!simpleData || simpleData.length === 0) {
-          console.log('No performances found in database');
-          setPerformances([]);
-          setLoading(false);
-          return;
-        }
-
-        // If we have data but no participant info, we need to fetch it separately
-        const performancesWithDetails = await fetchParticipantDetails(simpleData);
-        setPerformances(performancesWithDetails);
+      if (performanceError) {
+        console.error('Error fetching performances:', performanceError);
+        setError(`Error loading performances: ${performanceError.message}`);
         setLoading(false);
         return;
       }
 
-      // Transform the data from Option 1 to match our interface
-      const transformedData = performanceData.map((perf: any) => ({
-        id: perf.id,
-        performance_title: perf.performance_title,
-        performance_image_url: perf.performance_image_url,
-        performance_order: perf.performance_order,
-        participant: perf.participants ? {
-          full_name: perf.participants.full_name,
-          team_name: perf.participants.team_name
-        } : null,
-        category: perf.categories ? {
-          name: perf.categories.name,
-          type: perf.categories.type,
-          is_group: perf.categories.is_group
-        } : null,
-        vote_count: 0, // Will be updated below
-        has_voted: false // Will be updated below
-      }));
+      if (!performanceData || performanceData.length === 0) {
+        console.log('No performances found in database');
+        setPerformances([]);
+        setLoading(false);
+        return;
+      }
 
-      // Fetch vote counts for each performance
-      const { data: voteData, error: voteError } = await supabase
+      // Now let's manually fetch participant and category data
+      const performancesWithDetails = await fetchPerformanceDetails(performanceData);
+      
+      // Fetch vote counts
+      const { data: voteData } = await supabase
         .from('performance_votes')
         .select('performance_id');
 
       console.log('Vote data:', voteData);
-      console.log('Vote error:', voteError);
 
       // Count votes per performance
       const voteCounts: Record<string, number> = {};
@@ -125,91 +77,99 @@ export default function VotingPage() {
 
       // Check which performances current user has voted for
       const votedPerformances = getVotedPerformances();
-      console.log('Voted performances from localStorage:', votedPerformances);
 
-      const performancesWithVotes = transformedData.map((perf) => ({
+      const finalPerformances = performancesWithDetails.map((perf) => ({
         ...perf,
         vote_count: voteCounts[perf.id] || 0,
         has_voted: votedPerformances.includes(perf.id),
       }));
 
-      console.log('Final performances with votes:', performancesWithVotes);
-      setPerformances(performancesWithVotes);
+      console.log('Final performances:', finalPerformances);
+      setPerformances(finalPerformances);
+
     } catch (err) {
-      console.error('Unexpected error in fetchPerformances:', err);
+      console.error('Unexpected error:', err);
       setError('An unexpected error occurred while loading performances.');
     } finally {
       setLoading(false);
     }
   };
 
-  // Alternative method to fetch participant details separately
-  const fetchParticipantDetails = async (performances: any[]) => {
-    try {
-      // Get all participant IDs from performances
-      const participantIds = performances.map(p => p.participant_id).filter(Boolean);
-      const categoryIds = performances.map(p => p.category_id).filter(Boolean);
+  const fetchPerformanceDetails = async (performances: any[]) => {
+    const performancesWithDetails: Performance[] = [];
 
-      // Fetch participants
-      const { data: participantsData } = participantIds.length > 0 
-        ? await supabase
+    for (const perf of performances) {
+      try {
+        // Fetch participant details
+        let participantName = 'Unknown Participant';
+        let teamName = undefined;
+
+        if (perf.participant_id) {
+          const { data: participantData } = await supabase
             .from('participants')
-            .select('id, full_name, team_name')
-            .in('id', participantIds)
-        : { data: [] };
+            .select('full_name, team_name')
+            .eq('id', perf.participant_id)
+            .single();
 
-      // Fetch categories
-      const { data: categoriesData } = categoryIds.length > 0
-        ? await supabase
+          if (participantData) {
+            participantName = participantData.full_name;
+            teamName = participantData.team_name;
+          }
+        }
+
+        // Fetch category details
+        let categoryName = 'Uncategorized';
+        let categoryType = 'other';
+        let isGroup = false;
+
+        if (perf.category_id) {
+          const { data: categoryData } = await supabase
             .from('categories')
-            .select('id, name, type, is_group')
-            .in('id', categoryIds)
-        : { data: [] };
+            .select('name, type, is_group')
+            .eq('id', perf.category_id)
+            .single();
 
-      console.log('Participants data:', participantsData);
-      console.log('Categories data:', categoriesData);
+          if (categoryData) {
+            categoryName = categoryData.name;
+            categoryType = categoryData.type;
+            isGroup = categoryData.is_group;
+          }
+        }
 
-      // Create lookup objects
-      const participantsMap: Record<string, any> = {};
-      participantsData?.forEach(p => {
-        participantsMap[p.id] = p;
-      });
+        performancesWithDetails.push({
+          id: perf.id,
+          performance_title: perf.performance_title,
+          performance_image_url: perf.performance_image_url,
+          performance_order: perf.performance_order,
+          participant_name: participantName,
+          team_name: teamName,
+          category_name: categoryName,
+          category_type: categoryType,
+          is_group: isGroup,
+          vote_count: 0, // Will be updated later
+          has_voted: false // Will be updated later
+        });
 
-      const categoriesMap: Record<string, any> = {};
-      categoriesData?.forEach(c => {
-        categoriesMap[c.id] = c;
-      });
-
-      // Combine data
-      return performances.map(perf => ({
-        id: perf.id,
-        performance_title: perf.performance_title,
-        performance_image_url: perf.performance_image_url,
-        performance_order: perf.performance_order,
-        participant: perf.participant_id && participantsMap[perf.participant_id] 
-          ? {
-              full_name: participantsMap[perf.participant_id].full_name,
-              team_name: participantsMap[perf.participant_id].team_name
-            }
-          : null,
-        category: perf.category_id && categoriesMap[perf.category_id]
-          ? {
-              name: categoriesMap[perf.category_id].name,
-              type: categoriesMap[perf.category_id].type,
-              is_group: categoriesMap[perf.category_id].is_group
-            }
-          : null,
-        vote_count: 0,
-        has_voted: false
-      }));
-    } catch (error) {
-      console.error('Error fetching participant details:', error);
-      return performances.map(perf => ({
-        ...perf,
-        participant: null,
-        category: null
-      }));
+      } catch (error) {
+        console.error(`Error fetching details for performance ${perf.id}:`, error);
+        // Add performance with fallback data
+        performancesWithDetails.push({
+          id: perf.id,
+          performance_title: perf.performance_title,
+          performance_image_url: perf.performance_image_url,
+          performance_order: perf.performance_order,
+          participant_name: 'Unknown Participant',
+          team_name: undefined,
+          category_name: 'Uncategorized',
+          category_type: 'other',
+          is_group: false,
+          vote_count: 0,
+          has_voted: false
+        });
+      }
     }
+
+    return performancesWithDetails;
   };
 
   const getVotedPerformances = (): string[] => {
@@ -217,7 +177,7 @@ export default function VotingPage() {
       const voted = localStorage.getItem('voted_performances');
       return voted ? JSON.parse(voted) : [];
     } catch (error) {
-      console.error('Error reading voted performances from localStorage:', error);
+      console.error('Error reading voted performances:', error);
       return [];
     }
   };
@@ -230,7 +190,7 @@ export default function VotingPage() {
         localStorage.setItem('voted_performances', JSON.stringify(voted));
       }
     } catch (error) {
-      console.error('Error saving vote to localStorage:', error);
+      console.error('Error saving vote:', error);
     }
   };
 
@@ -254,15 +214,12 @@ export default function VotingPage() {
       });
 
       if (error) {
-        if (error.message.includes('duplicate') || error.code === '23505') {
-          setMessage({ type: 'error', text: 'You have already voted for this performance!' });
-          markAsVoted(performanceId);
-        } else {
-          setMessage({ type: 'error', text: 'Failed to submit vote. Please try again.' });
-        }
+        console.error('Vote error:', error);
+        setMessage({ type: 'error', text: 'Failed to submit vote. Please try again.' });
       } else {
         markAsVoted(performanceId);
         setMessage({ type: 'success', text: 'Thank you! Your vote has been recorded.' });
+        // Refresh the performances to update vote counts
         fetchPerformances();
       }
     } catch (err) {
@@ -283,16 +240,15 @@ export default function VotingPage() {
       }
       return identifier;
     } catch (error) {
-      console.error('Error generating voter identifier:', error);
       return `fallback_voter_${Date.now()}`;
     }
   };
 
-  const categories = [...new Set(performances.map((p) => p.category?.name).filter(Boolean))] as string[];
+  const categories = [...new Set(performances.map((p) => p.category_name).filter(Boolean))];
   const filteredPerformances =
     categoryFilter === 'all'
       ? performances
-      : performances.filter((p) => p.category?.name === categoryFilter);
+      : performances.filter((p) => p.category_name === categoryFilter);
 
   if (loading) {
     return (
@@ -406,102 +362,83 @@ export default function VotingPage() {
           </div>
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 w-full">
-            {filteredPerformances.map((performance) => {
-              const participantName = performance.participant?.full_name || 'Unknown Participant';
-              const teamName = performance.participant?.team_name;
-              const categoryName = performance.category?.name || 'Uncategorized';
-              const categoryType = performance.category?.type || 'other';
-              const isGroup = performance.category?.is_group || false;
-
-              // Debug log for each performance
-              console.log('Rendering performance:', {
-                title: performance.performance_title,
-                participant: performance.participant,
-                participantName,
-                teamName
-              });
-
-              return (
-                <div
-                  key={performance.id}
-                  className="bg-white rounded-xl shadow-md hover:shadow-xl transition-shadow border border-slate-200 overflow-hidden"
-                >
-                  {performance.performance_image_url && (
-                    <div className="w-full h-48 overflow-hidden bg-slate-100">
-                      <img 
-                        src={performance.performance_image_url} 
-                        alt={performance.performance_title}
-                        className="w-full h-full object-cover"
-                        onError={(e) => {
-                          const target = e.target as HTMLImageElement;
-                          target.style.display = 'none';
-                        }}
-                      />
-                    </div>
-                  )}
-                  <div className="p-6">
-                    <div className="flex items-start justify-between mb-3">
-                      <div className="flex-1">
-                        <span
-                          className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium mb-2 ${
-                            categoryType === 'singing'
-                              ? 'bg-purple-100 text-purple-800'
-                              : categoryType === 'dancing'
-                              ? 'bg-blue-100 text-blue-800'
-                              : 'bg-green-100 text-green-800'
-                          }`}
-                        >
-                          {isGroup ? <UsersIcon className="w-3 h-3 mr-1" /> : null}
-                          {categoryName}
-                        </span>
-                        <h3 className="text-lg font-bold text-slate-900 mb-1">
-                          {performance.performance_title}
-                        </h3>
-                        <p className="text-sm text-slate-600">
-                          {teamName || participantName}
-                          {!performance.participant && (
-                            <span className="text-xs text-orange-500 ml-2">(No participant data)</span>
-                          )}
-                        </p>
-                      </div>
-                    </div>
-                  
-                    <div className="flex items-center justify-between pt-4 border-t border-slate-100">
-                      <div className="flex items-center gap-2 text-slate-600">
-                        <Heart className="w-5 h-5 text-pink-500" />
-                        <span className="font-semibold text-lg">{performance.vote_count}</span>
-                        <span className="text-sm text-slate-500">
-                          {performance.vote_count === 1 ? 'like' : 'likes'}
-                        </span>
-                      </div> 
-                                
-                      <button
-                        onClick={() => handleVote(performance.id)}
-                        disabled={performance.has_voted || votingFor === performance.id}
-                        className={`flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition-all ${
-                          performance.has_voted
-                            ? 'bg-slate-100 text-slate-400 cursor-not-allowed'
-                            : votingFor === performance.id
-                            ? 'bg-slate-200 text-slate-500 cursor-wait'
-                            : 'bg-gradient-to-r from-pink-500 to-purple-600 text-white hover:from-pink-600 hover:to-purple-700 shadow-md hover:shadow-lg'
+            {filteredPerformances.map((performance) => (
+              <div
+                key={performance.id}
+                className="bg-white rounded-xl shadow-md hover:shadow-xl transition-shadow border border-slate-200 overflow-hidden"
+              >
+                {performance.performance_image_url && (
+                  <div className="w-full h-48 overflow-hidden bg-slate-100">
+                    <img 
+                      src={performance.performance_image_url} 
+                      alt={performance.performance_title}
+                      className="w-full h-full object-cover"
+                      onError={(e) => {
+                        const target = e.target as HTMLImageElement;
+                        target.style.display = 'none';
+                      }}
+                    />
+                  </div>
+                )}
+                <div className="p-6">
+                  <div className="flex items-start justify-between mb-3">
+                    <div className="flex-1">
+                      <span
+                        className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium mb-2 ${
+                          performance.category_type === 'singing'
+                            ? 'bg-purple-100 text-purple-800'
+                            : performance.category_type === 'dancing'
+                            ? 'bg-blue-100 text-blue-800'
+                            : 'bg-green-100 text-green-800'
                         }`}
                       >
-                        <Heart
-                          className={`w-5 h-5 ${
-                            performance.has_voted ? 'fill-current' : ''
-                          }`}
-                        />
-                        {performance.has_voted
-                          ? 'Voted'
-                          : votingFor === performance.id
-                          ? 'Voting...'
-                          : 'Vote'}
-                      </button>
+                        {performance.is_group ? <UsersIcon className="w-3 h-3 mr-1" /> : null}
+                        {performance.category_name}
+                      </span>
+                      <h3 className="text-lg font-bold text-slate-900 mb-1">
+                        {performance.performance_title}
+                      </h3>
+                      <p className="text-sm text-slate-600">
+                        {performance.team_name || performance.participant_name}
+                      </p>
                     </div>
                   </div>
+                
+                  <div className="flex items-center justify-between pt-4 border-t border-slate-100">
+                    <div className="flex items-center gap-2 text-slate-600">
+                      <Heart className="w-5 h-5 text-pink-500" />
+                      <span className="font-semibold text-lg">{performance.vote_count}</span>
+                      <span className="text-sm text-slate-500">
+                        {performance.vote_count === 1 ? 'like' : 'likes'}
+                      </span>
+                    </div> 
+                              
+                    <button
+                      onClick={() => handleVote(performance.id)}
+                      disabled={performance.has_voted || votingFor === performance.id}
+                      className={`flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition-all ${
+                        performance.has_voted
+                          ? 'bg-slate-100 text-slate-400 cursor-not-allowed'
+                          : votingFor === performance.id
+                          ? 'bg-slate-200 text-slate-500 cursor-wait'
+                          : 'bg-gradient-to-r from-pink-500 to-purple-600 text-white hover:from-pink-600 hover:to-purple-700 shadow-md hover:shadow-lg'
+                      }`}
+                    >
+                      <Heart
+                        className={`w-5 h-5 ${
+                          performance.has_voted ? 'fill-current' : ''
+                        }`}
+                      />
+                      {performance.has_voted
+                        ? 'Voted'
+                        : votingFor === performance.id
+                        ? 'Voting...'
+                        : 'Vote'}
+                    </button>
+                  </div>
                 </div>
-              );
-            })}
+              </div>
+            ))}
           </div>
         )}
       </main>
