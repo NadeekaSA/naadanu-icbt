@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../../lib/supabase';
-import { Trophy, Heart, Plus, X, AlertCircle, Trash2, Eye, EyeOff } from 'lucide-react';
+import { Trophy, Heart, Plus, X, AlertCircle, Trash2, Eye, EyeOff, Music, Users as UsersIcon } from 'lucide-react';
 
 interface Participant {
   id: string;
@@ -28,10 +28,21 @@ interface Performance {
     type: string;
   };
   vote_count: number;
+  performance_image_url?: string;
+}
+
+// New interface for category-wise performance grouping
+interface CategoryPerformances {
+  category: {
+    name: string;
+    type: string;
+  };
+  performances: Performance[];
 }
 
 export default function PopularPerformancesManagement() {
   const [performances, setPerformances] = useState<Performance[]>([]);
+  const [categoryPerformances, setCategoryPerformances] = useState<CategoryPerformances[]>([]);
   const [selectedParticipants, setSelectedParticipants] = useState<Participant[]>([]);
   const [loading, setLoading] = useState(true);
   const [showAddModal, setShowAddModal] = useState(false);
@@ -118,8 +129,9 @@ export default function PopularPerformancesManagement() {
         performance_title,
         performance_order,
         is_active,
+        performance_image_url,
         participant:participants(full_name, icbt_id, team_name),
-        category:categories(name, type)
+        category:categories(name, type, is_group)
       `)
       .order('performance_order');
 
@@ -148,6 +160,32 @@ export default function PopularPerformancesManagement() {
     }));
 
     setPerformances(performancesWithVotes);
+    
+    // Group performances by category for the new feature
+    const groupedPerformances: Record<string, CategoryPerformances> = {};
+    
+    performancesWithVotes.forEach(performance => {
+      const categoryName = performance.category.name;
+      
+      if (!groupedPerformances[categoryName]) {
+        groupedPerformances[categoryName] = {
+          category: performance.category,
+          performances: []
+        };
+      }
+      
+      groupedPerformances[categoryName].performances.push(performance);
+    });
+    
+    // Convert to array and sort performances by vote count within each category
+    const categoryPerformancesArray = Object.values(groupedPerformances).map(categoryGroup => ({
+      ...categoryGroup,
+      performances: categoryGroup.performances
+        .sort((a, b) => b.vote_count - a.vote_count) // Sort by vote count descending
+        .slice(0, 1) // Take only the top performance per category
+    }));
+    
+    setCategoryPerformances(categoryPerformancesArray);
     setLoading(false);
   };
 
@@ -275,6 +313,77 @@ export default function PopularPerformancesManagement() {
             Add Performance
           </button>
         </div>
+      </div>
+
+      {/* New Category-wise Popular Performances Section */}
+      <div className="bg-white rounded-lg border border-slate-200 p-6">
+        <div className="flex items-center gap-3 mb-6">
+          <Trophy className="w-6 h-6 text-purple-600" />
+          <h3 className="text-lg font-semibold text-slate-900">Most Popular Performances by Category</h3>
+        </div>
+        
+        {categoryPerformances.length === 0 ? (
+          <div className="text-center py-8 text-slate-500">
+            No performances available yet
+          </div>
+        ) : (
+          <div className="flex flex-col sm:flex-row gap-4">
+            {categoryPerformances.map((categoryGroup) => (
+              categoryGroup.performances.length > 0 && (
+                <div 
+                  key={categoryGroup.category.name} 
+                  className="flex-1 min-w-[250px] bg-gradient-to-br from-white to-slate-50 rounded-xl shadow-md border border-slate-200 overflow-hidden flex"
+                >
+                  {categoryGroup.performances[0].performance_image_url && (
+                    <div className="w-24 h-24 flex-shrink-0">
+                      <img 
+                        src={categoryGroup.performances[0].performance_image_url} 
+                        alt={categoryGroup.performances[0].performance_title}
+                        className="w-full h-full object-cover"
+                        onError={(e) => {
+                          // Handle image loading errors gracefully
+                          const target = e.target as HTMLImageElement;
+                          target.parentElement!.style.display = 'none';
+                        }}
+                      />
+                    </div>
+                  )}
+                  <div className="p-4 flex-1">
+                    <div className="flex items-start justify-between mb-2">
+                      <div className="flex-1">
+                        <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium mb-2 ${
+                          categoryGroup.category.type === 'singing'
+                            ? 'bg-purple-100 text-purple-800'
+                            : 'bg-blue-100 text-blue-800'
+                        }`}>
+                          {categoryGroup.category.name}
+                        </span>
+                        <h4 className="font-bold text-slate-900 text-sm line-clamp-2">
+                          {categoryGroup.performances[0].performance_title}
+                        </h4>
+                        <p className="text-xs text-slate-600 mt-1">
+                          {categoryGroup.performances[0].participant.team_name || categoryGroup.performances[0].participant.full_name}
+                        </p>
+                      </div>
+                    </div>
+                    
+                    <div className="flex items-center justify-between mt-3 pt-2 border-t border-slate-100">
+                      <div className="flex items-center gap-1">
+                        <Heart className="w-4 h-4 text-pink-500 fill-current" />
+                        <span className="font-bold text-slate-900">
+                          {categoryGroup.performances[0].vote_count}
+                        </span>
+                      </div>
+                      <span className="text-xs text-slate-500">
+                        #{categoryGroup.performances[0].performance_order}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              )
+            ))}
+          </div>
+        )}
       </div>
 
       {showAddModal && (
