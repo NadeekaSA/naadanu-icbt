@@ -37,12 +37,12 @@ export default function LandingPage({ onLogin, onRegister }: LandingPageProps) {
               Registration has now closed. Log in to view your audition details, announcements, and competition updates.
             </p>
             <div className="flex flex-col sm:flex-row gap-4 justify-center">
-               <button
+              {/* <button
                onClick={onRegister}
                 className="px-8 py-4 bg-slate-900 text-white text-lg font-semibold rounded-lg hover:bg-slate-800 transition-all transform hover:scale-105 shadow-lg"
               > 
                 Register as Participant 
-              </button> 
+              </button>  */}
               <button
                 onClick={onLogin}
                 className="px-8 py-4 bg-white text-slate-900 text-lg font-semibold rounded-lg border-2 border-slate-900 hover:bg-slate-50 transition-all transform hover:scale-105"
