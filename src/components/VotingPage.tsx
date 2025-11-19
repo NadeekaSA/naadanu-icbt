@@ -402,11 +402,11 @@ export default function VotingPage() {
                 
                   <div className="flex items-center justify-between pt-4 border-t border-slate-100">
                     <div className="flex items-center gap-2 text-slate-600">
-                      <Heart className="w-5 h-5 text-pink-500" />
+                      {/*   <Heart className="w-5 h-5 text-pink-500" />
                       <span className="font-semibold text-lg">{performance.vote_count}</span>
                       <span className="text-sm text-slate-500">
                         {performance.vote_count === 1 ? 'like' : 'likes'}
-                      </span>
+                      </span> */}
                     </div> 
                               
                     <button
@@ -448,4 +448,5 @@ export default function VotingPage() {
     </div>
   );
 }
+
 
