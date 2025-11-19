@@ -281,7 +281,7 @@ export default function VotingPage() {
               <Trophy className="w-10 h-10 text-purple-600" />
               <h1 className="text-3xl font-bold text-slate-900">නාදනූ 2.0 Finals</h1>
             </div>
-            <p className="text-slate-600 text-lg">Vote for Your Favorite Performance</p>
+            <p className="text-slate-600 text-lg">Vote for Popular Performance</p>
             <p className="text-sm text-slate-500 mt-1">Support your favorite performers by giving them a like!</p>
           </div>
         </div>
@@ -448,5 +448,6 @@ export default function VotingPage() {
     </div>
   );
 }
+
 
 
