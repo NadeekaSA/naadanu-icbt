@@ -391,12 +391,12 @@ export default function VotingPage() {
                       <h3 className="text-lg font-bold text-slate-900 mb-1">
                         {performance.performance_title}
                       </h3>
-                      <p className="text-sm text-slate-600">
+                      {/* <p className="text-sm text-slate-600">
                         {performance.team_name || performance.participant_name}
                         {performance.participant_name === 'Unknown Participant' && (
                           <span className="text-xs text-orange-500 ml-2">(Participant data missing)</span>
                         )}
-                      </p>
+                      </p> */}
                     </div>
                   </div>
                 
@@ -448,3 +448,4 @@ export default function VotingPage() {
     </div>
   );
 }
+
