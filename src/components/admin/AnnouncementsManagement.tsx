@@ -15,6 +15,7 @@ interface Announcement {
   is_active: boolean;
   created_at: string;
   category: {
+    id: string;
     name: string;
   } | null;
 }
@@ -42,7 +43,7 @@ export default function AnnouncementsManagement() {
       .from('announcements')
       .select(`
         *,
-        category:categories(name)
+        category:categories(id, name)
       `)
       .order('created_at', { ascending: false });
 
