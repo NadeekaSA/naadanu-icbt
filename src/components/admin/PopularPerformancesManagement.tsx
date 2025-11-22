@@ -121,72 +121,104 @@ export default function PopularPerformancesManagement() {
   const fetchPerformances = async () => {
     setLoading(true);
 
-    // Fetch performances
-    const { data: performanceData, error: perfError } = await supabase
-      .from('final_performances')
-      .select(`
-        id,
-        performance_title,
-        performance_order,
-        is_active,
-        performance_image_url,
-        participant:participants(full_name, icbt_id, team_name),
-        category:categories(name, type, is_group)
-      `)
-      .order('performance_order');
+    try {
+      // Fetch performances with vote counts in a single query using a subquery
+      const { data: performanceData, error: perfError } = await supabase
+        .from('final_performances')
+        .select(`
+          id,
+          performance_title,
+          performance_order,
+          is_active,
+          performance_image_url,
+          participant:participants(full_name, icbt_id, team_name),
+          category:categories(name, type, is_group),
+          performance_votes(count)
+        `)
+        .order('performance_order');
 
-    if (perfError) {
-      console.error('Error fetching performances:', perfError);
-    }
+      if (perfError) {
+        console.error('Error fetching performances:', perfError);
+        setError(`Failed to load performances: ${perfError.message}`);
+        setLoading(false);
+        return;
+      }
 
-    if (perfError || !performanceData) {
+      if (!performanceData) {
+        setPerformances([]);
+        setCategoryPerformances([]);
+        setLoading(false);
+        return;
+      }
+
+      // Transform the data to include vote counts
+      const performancesWithVotes = (performanceData as any[]).map((perf) => ({
+        id: perf.id,
+        performance_title: perf.performance_title,
+        performance_order: perf.performance_order,
+        is_active: perf.is_active,
+        performance_image_url: perf.performance_image_url,
+        participant: perf.participant,
+        category: perf.category,
+        // Extract vote count from the count aggregation
+        vote_count: perf.performance_votes?.[0]?.count || 0
+      }));
+
+      setPerformances(performancesWithVotes);
+      
+      // Group performances by category for the new feature
+      const groupedPerformances: Record<string, CategoryPerformances> = {};
+      
+      performancesWithVotes.forEach(performance => {
+        const categoryName = performance.category.name;
+        
+        if (!groupedPerformances[categoryName]) {
+          groupedPerformances[categoryName] = {
+            category: performance.category,
+            performances: []
+          };
+        }
+        
+        groupedPerformances[categoryName].performances.push(performance);
+      });
+      
+      // Convert to array and sort performances by vote count within each category
+      const categoryPerformancesArray = Object.values(groupedPerformances).map(categoryGroup => ({
+        ...categoryGroup,
+        performances: categoryGroup.performances
+          .sort((a, b) => b.vote_count - a.vote_count) // Sort by vote count descending
+          .slice(0, 1) // Take only the top performance per category
+      }));
+      
+      setCategoryPerformances(categoryPerformancesArray);
+    } catch (err) {
+      console.error('Unexpected error fetching performances:', err);
+      setError('An unexpected error occurred while loading performances');
+    } finally {
       setLoading(false);
-      return;
     }
+  };
 
-    // Fetch vote counts
-    const { data: voteData } = await supabase
+  // Alternative method if the above doesn't work - using a separate vote count query
+  const fetchVoteCountsSeparately = async (performanceIds: string[]) => {
+    if (performanceIds.length === 0) return {};
+
+    const { data: voteData, error } = await supabase
       .from('performance_votes')
-      .select('performance_id');
+      .select('performance_id')
+      .in('performance_id', performanceIds);
+
+    if (error) {
+      console.error('Error fetching vote counts:', error);
+      return {};
+    }
 
     const voteCounts: Record<string, number> = {};
     voteData?.forEach((vote) => {
       voteCounts[vote.performance_id] = (voteCounts[vote.performance_id] || 0) + 1;
     });
 
-    const performancesWithVotes = (performanceData as any[]).map((perf) => ({
-      ...perf,
-      vote_count: voteCounts[perf.id] || 0,
-    }));
-
-    setPerformances(performancesWithVotes);
-    
-    // Group performances by category for the new feature
-    const groupedPerformances: Record<string, CategoryPerformances> = {};
-    
-    performancesWithVotes.forEach(performance => {
-      const categoryName = performance.category.name;
-      
-      if (!groupedPerformances[categoryName]) {
-        groupedPerformances[categoryName] = {
-          category: performance.category,
-          performances: []
-        };
-      }
-      
-      groupedPerformances[categoryName].performances.push(performance);
-    });
-    
-    // Convert to array and sort performances by vote count within each category
-    const categoryPerformancesArray = Object.values(groupedPerformances).map(categoryGroup => ({
-      ...categoryGroup,
-      performances: categoryGroup.performances
-        .sort((a, b) => b.vote_count - a.vote_count) // Sort by vote count descending
-        .slice(0, 1) // Take only the top performance per category
-    }));
-    
-    setCategoryPerformances(categoryPerformancesArray);
-    setLoading(false);
+    return voteCounts;
   };
 
   const handleAddPerformance = async () => {
