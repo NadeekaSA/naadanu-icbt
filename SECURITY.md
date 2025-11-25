@@ -4,7 +4,7 @@ This document outlines the security policies and procedures for the Nadanu Event
 
 ## Reporting a Vulnerability
 
-If you discover a security vulnerability, please report it to us as soon as possible by emailing `security@example.com`. We appreciate your efforts to disclose your findings responsibly and will make every effort to acknowledge your contributions.
+If you discover a security vulnerability, please report it to us as soon as possible by emailing `nadeekasa@proton.me`. We appreciate your efforts to disclose your findings responsibly and will make every effort to acknowledge your contributions.
 
 ## Data Security and Privacy
 
