@@ -495,7 +495,7 @@ export default function PopularPerformancesManagement() {
                 </label>
                 <input
                   type="text"
-                  placeholder="e.g., Melody of Dreams"
+                  placeholder="e.g., FYI: Enter Performer Name here"
                   value={addForm.performanceTitle}
                   onChange={(e) => setAddForm({ ...addForm, performanceTitle: e.target.value })}
                   className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-900 focus:border-transparent"
@@ -508,7 +508,7 @@ export default function PopularPerformancesManagement() {
                 </label>
                 <input
                   type="text"
-                  placeholder="https://example.com/image.jpg"
+                  placeholder="FYI: Upload image to database storage and put link here"
                   value={addForm.performanceImageUrl}
                   onChange={(e) => setAddForm({ ...addForm, performanceImageUrl: e.target.value })}
                   className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-900 focus:border-transparent"
@@ -689,3 +689,4 @@ export default function PopularPerformancesManagement() {
     </div>
   );
 }
+
