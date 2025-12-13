@@ -83,3 +83,7 @@ The application should now be running on `http://localhost:5173`.
 - `npm run lint`: Lints the codebase using ESLint.
 - `npm run preview`: Previews the production build locally.
 - `npm run typecheck`: Runs TypeScript type checking.
+
+## License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
