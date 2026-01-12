@@ -29,12 +29,6 @@ export default function LandingPage({ onLogin, onRegister }: LandingPageProps) {
             </h2>
             <p className="text-slate-600 mb-8 text-lg">
               Join us for an exciting showcase of talent! Register now to participate in solo or group singing and dancing competitions.
-            </p> 
-            <h2 className="text-3xl font-bold text-slate-900 mb-6">
-              Login to Your Account
-            </h2>
-            <p className="text-slate-600 mb-8 text-lg">
-              Registration has now closed. Log in to view your audition details, announcements, and competition updates.
             </p>
             <div className="flex flex-col sm:flex-row gap-4 justify-center">
                <button
@@ -42,7 +36,20 @@ export default function LandingPage({ onLogin, onRegister }: LandingPageProps) {
                 className="px-8 py-4 bg-slate-900 text-white text-lg font-semibold rounded-lg hover:bg-slate-800 transition-all transform hover:scale-105 shadow-lg"
               > 
                 Register as Participant 
-              </button>  
+              </button> 
+            <h2 className="text-3xl font-bold text-slate-900 mb-6">
+              Login to Your Account
+            </h2>
+            <p className="text-slate-600 mb-8 text-lg">
+              Registration has now closed. Log in to view your audition details, announcements, and competition updates.
+            </p>
+              {/*  <div className="flex flex-col sm:flex-row gap-4 justify-center">
+               <button
+               onClick={onRegister}
+                className="px-8 py-4 bg-slate-900 text-white text-lg font-semibold rounded-lg hover:bg-slate-800 transition-all transform hover:scale-105 shadow-lg"
+              > 
+                Register as Participant 
+              </button>  */}
               <button
                 onClick={onLogin}
                 className="px-8 py-4 bg-white text-slate-900 text-lg font-semibold rounded-lg border-2 border-slate-900 hover:bg-slate-50 transition-all transform hover:scale-105"
