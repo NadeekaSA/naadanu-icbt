@@ -24,12 +24,12 @@ export default function LandingPage({ onLogin, onRegister }: LandingPageProps) {
 
         <div className="bg-white rounded-2xl shadow-2xl overflow-hidden max-w-4xl mx-auto mb-16">
           <div className="p-8 md:p-12 text-center">
-            {/*  <h2 className="text-3xl font-bold text-slate-900 mb-6">
+              <h2 className="text-3xl font-bold text-slate-900 mb-6">
               Registration Now Open
             </h2>
             <p className="text-slate-600 mb-8 text-lg">
               Join us for an exciting showcase of talent! Register now to participate in solo or group singing and dancing competitions.
-            </p> */}
+            </p> 
             <h2 className="text-3xl font-bold text-slate-900 mb-6">
               Login to Your Account
             </h2>
