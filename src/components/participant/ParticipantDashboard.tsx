@@ -1,8 +1,9 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import { supabase } from '../../lib/supabase';
-import { LogOut, Calendar, Award, Megaphone, User } from 'lucide-react';
+import { LogOut, Calendar, Megaphone, User, Bell } from 'lucide-react';
 import NotificationBell from './NotificationBell';
+import { subscribeUserToPush, registerServiceWorker } from '../../lib/pushNotifications';
 
 interface ParticipantData {
   full_name: string;
@@ -39,19 +40,50 @@ export default function ParticipantDashboard() {
   const [audition, setAudition] = useState<Audition | null>(null);
   const [announcements, setAnnouncements] = useState<Announcement[]>([]);
   const [loading, setLoading] = useState(true);
+  const [pushSupported, setPushSupported] = useState(false);
+  const [pushSubscribed, setPushSubscribed] = useState(false);
+  const [subscribing, setSubscribing] = useState(false);
 
   useEffect(() => {
     if (user?.id) {
       fetchParticipantData();
       fetchAudition();
       fetchAnnouncements();
-      requestNotificationPermission();
+      
+      // Initialize Push Notification check and registration
+      const initPushNotifications = async () => {
+        const supported = 'serviceWorker' in navigator && 'PushManager' in window;
+        setPushSupported(supported);
+        
+        if (supported) {
+          // Register the service worker
+          await registerServiceWorker();
+          
+          // Check if already subscribed
+          if (Notification.permission === 'granted') {
+            setPushSubscribed(true);
+            // Silently sync subscription to ensure it's still fresh
+            await subscribeUserToPush(user.id);
+          }
+        }
+      };
+      
+      initPushNotifications();
     }
   }, [user]);
 
-  const requestNotificationPermission = async () => {
-    if ('Notification' in window && Notification.permission === 'default') {
-      await Notification.requestPermission();
+  const handleEnablePush = async () => {
+    if (!user?.id) return;
+    setSubscribing(true);
+    try {
+      const success = await subscribeUserToPush(user.id);
+      if (success) {
+        setPushSubscribed(true);
+      }
+    } catch (err) {
+      console.error('Error enabling push:', err);
+    } finally {
+      setSubscribing(false);
     }
   };
 
@@ -147,6 +179,38 @@ export default function ParticipantDashboard() {
       </header>
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        {pushSupported && !pushSubscribed && (
+          <div className="mb-6 bg-gradient-to-r from-blue-500 to-indigo-600 rounded-2xl p-6 text-white shadow-xl relative overflow-hidden group">
+            {/* Background design elements */}
+            <div className="absolute -right-10 -top-10 w-40 h-40 bg-white/10 rounded-full blur-xl group-hover:scale-110 transition-transform duration-500" />
+            <div className="absolute -left-10 -bottom-10 w-32 h-32 bg-indigo-400/20 rounded-full blur-lg" />
+            
+            <div className="relative flex flex-col md:flex-row md:items-center justify-between gap-6 z-10">
+              <div className="flex items-start gap-4">
+                <div className="p-3 bg-white/20 rounded-xl backdrop-blur-md shrink-0 animate-bounce">
+                  <Bell className="w-6 h-6 text-white" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-lg text-white">Enable Real-time Web Push Updates!</h3>
+                  <p className="text-blue-100 text-sm mt-1 max-w-2xl">
+                    Get instant notifications about your audition schedules, selection results, and announcements directly on your device, even when the browser is closed.
+                  </p>
+                  <p className="text-white/60 text-xs mt-2 italic">
+                    Note for iOS users: Tap the share button in Safari and select "Add to Home Screen" first, then open the app from your home screen to enable push.
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={handleEnablePush}
+                disabled={subscribing}
+                className="px-6 py-3 bg-white text-indigo-600 hover:bg-blue-50 font-semibold rounded-xl shadow-lg hover:shadow-xl transition-all active:scale-95 disabled:opacity-75 disabled:cursor-not-allowed shrink-0 text-center"
+              >
+                {subscribing ? 'Enabling...' : 'Enable Notifications'}
+              </button>
+            </div>
+          </div>
+        )}
+
         <div className="grid lg:grid-cols-3 gap-6">
           <div className="lg:col-span-2 space-y-6">
             {participantData && (
