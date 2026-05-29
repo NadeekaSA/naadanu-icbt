@@ -4,8 +4,3 @@
   "deploy": {
     "startCommand": "python notification_service.py"
   }
-=======
-  "$schema": "https://schema.railpack.com",
-  "provider": "node"
->>>>>>> 1cbf4e2dcecea8947278eb53e1fc9bc01d4cf0cb
-}
