@@ -1,1 +1,1 @@
-worker: python notification_service.py
+worker: python3 notification_service.py
