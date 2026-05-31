@@ -1,6 +1,6 @@
-# Nadanu Event Management System
+# Naadanu Event Management System
 
-Nadanu is a full-stack web application designed to manage the ICBT Computing Society's annual singing and dancing competition. The platform provides a seamless digital experience for participants, administrators, and the audience, from registration and auditions to final performances and public voting.
+Naadanu is a full-stack web application designed to manage the ICBT Computing Society's annual singing and dancing competition. The platform provides a seamless digital experience for participants, administrators, and the audience, from registration and auditions to final performances and public voting.
 
 ## Key Features
 
@@ -17,6 +17,7 @@ Nadanu is a full-stack web application designed to manage the ICBT Computing Soc
 - **Backend**: Supabase (PostgreSQL, Authentication, Realtime)
 - **Routing**: React Router
 - **Linting**: ESLint
+- **Web Push Notifications**: Python, pywebpush (Service backend)
 
 ## Database Schema
 
@@ -42,13 +43,14 @@ To get the project up and running locally, follow these steps:
 - Node.js (v18 or higher)
 - npm (or a compatible package manager)
 - A Supabase account
+- Python 3.9+ (For Web Push Notification Service)
 
 ### Installation
 
 1. **Clone the repository**:
    ```bash
-   git clone https://github.com/your-username/nadanu-event-system.git
-   cd nadanu-event-system
+   git clone https://github.com/your-username/naadanu-event-system.git
+   cd naadanu-event-system
    ```
 
 2. **Install dependencies**:
@@ -67,12 +69,34 @@ To get the project up and running locally, follow these steps:
      ```env
      VITE_SUPABASE_URL=your-supabase-project-url
      VITE_SUPABASE_ANON_KEY=your-supabase-anon-key
+     VITE_SUPABASE_SERVICE_ROLE_KEY=your-supabase-service-role-key
+     VITE_VAPID_PUBLIC_KEY=your-vapid-public-key
+     VAPID_PRIVATE_KEY_PATH=private_key.pem
+     VAPID_CLAIM_EMAIL=admin@naadanu.lk
      ```
 
-5. **Run the development server**:
-   ```bash
-   npm run dev
-   ```
+5. **Set up Web Push Notifications**:
+   - Run the script to generate VAPID keys. This will create `public_key.pem`, `private_key.pem`, and `vapid_keys.json` containing the keys.
+     ```bash
+     python generate_vapid_keys.py
+     ```
+   - Make sure to update the `.env` file with the newly generated `VITE_VAPID_PUBLIC_KEY`.
+
+6. **Run the application**:
+   - Start the Vite development server for the frontend:
+     ```bash
+     npm run dev
+     ```
+   - Start the Python Web Push Notification Service:
+     ```bash
+     pip install -r requirements.txt
+     python notification_service.py
+     ```
+     Alternatively, you can run the notification service using Docker. Ensure Docker is installed, then build and run the container:
+     ```bash
+     docker build -t naadanu-notification-service .
+     docker run -d --env-file .env naadanu-notification-service
+     ```
 
 The application should now be running on `http://localhost:5173`.
 
